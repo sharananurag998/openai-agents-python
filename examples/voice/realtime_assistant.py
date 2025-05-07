@@ -18,7 +18,7 @@ Important Note:
    on applying for access to the realtime API.
 
 Usage:
-    python continuous_realtime_assistant.py
+    python realtime_assistant.py
 """
 
 import asyncio
@@ -26,6 +26,7 @@ import logging
 import os
 import time
 from typing import Dict, Any
+from dataclasses import dataclass
 
 import numpy as np
 import sounddevice as sd  # For microphone and speaker I/O
@@ -42,6 +43,7 @@ from agents.voice import (
 )
 from agents.tool import function_tool, Tool
 from agents.voice.models.sdk_realtime import SDKRealtimeLLM
+from agents.run_context import RunContextWrapper
 
 # Import the new event types from our SDK
 from agents.voice.realtime.model import (
@@ -60,6 +62,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("realtime_assistant")
 
 
+# Define a dataclass for our application context
+@dataclass
+class MyAppContext:
+    """A simple context for the realtime voice assistant example."""
+
+    user_name: str
+    interaction_count: int = 0
+
+
 # Define some sample tools
 @function_tool
 def get_weather(city: str) -> Dict[str, Any]:
@@ -73,6 +84,37 @@ def get_time(timezone: str = "UTC") -> Dict[str, Any]:
     """Gets the current time in the specified timezone."""
     logger.info(f"Getting time for timezone {timezone}")
     return {"time": time.strftime("%H:%M:%S", time.gmtime()), "timezone": timezone}
+
+
+# Define a context-aware tool
+@function_tool
+def greet_user_and_count(context: RunContextWrapper[MyAppContext]) -> str:
+    """Greets the user by name and counts interactions."""
+    logger.info(f"greet_user_and_count called with context: {context}")
+    # Increment the interaction count
+    context.context.interaction_count += 1
+
+    logger.info(
+        f"Greeting user: {context.context.user_name}, "
+        f"Interaction count: {context.context.interaction_count}"
+    )
+
+    return f"Hello {context.context.user_name}! This is interaction number {context.context.interaction_count}."
+
+
+# Another context-aware tool that reads but doesn't modify the context
+@function_tool
+def get_user_details(context: RunContextWrapper[MyAppContext]) -> Dict[str, Any]:
+    """Gets the user's details from the context."""
+    logger.info(f"get_user_details called with context: {context}")
+
+    logger.info(
+        f"Returning user details: name={context.context.user_name}, count={context.context.interaction_count}"
+    )
+    return {
+        "user_name": context.context.user_name,
+        "interaction_count": context.context.interaction_count,
+    }
 
 
 # Get the OpenAI API key from environment variables
@@ -117,18 +159,22 @@ async def main():
         realtime_settings={
             "turn_detection": "server_vad",  # Use server-side VAD
             "assistant_voice": "alloy",
-            "system_message": "You are a helpful assistant that responds concisely.",
+            "system_message": "You are a helpful assistant that responds concisely. You can use the greet_user_and_count tool to greet the user by name and the get_user_details tool to retrieve information about the user.",
             # Enable server-side noise / echo reduction
             "input_audio_noise_reduction": {},
         }
     )
     input_stream = StreamedAudioInput()
 
-    # Create the realtime pipeline
+    # Create our application context
+    app_context = MyAppContext(user_name="Anurag", interaction_count=0)
+
+    # Create the realtime pipeline with shared context
     pipeline = RealtimeVoicePipeline(
         model=model,
-        tools=[get_weather, get_time],
+        tools=[get_weather, get_time, greet_user_and_count, get_user_details],
         config=config,
+        shared_context=app_context,  # Pass the context to the pipeline
     )
 
     # Track events and errors
@@ -320,6 +366,9 @@ async def main():
                 pass
 
         logger.info(f"Total events processed: {event_count}")
+
+        # Print the final interaction count from the context
+        logger.info(f"Final interaction count: {app_context.interaction_count}")
 
         # Provide troubleshooting information if needed
         if error_occurred or event_count <= 1:  # <=1 because turn_started is an event

@@ -37,6 +37,7 @@ class RealtimeVoicePipeline:
         model: RealtimeLLMModel | str | None = None,
         tools: Sequence[Tool] = (),
         config: VoicePipelineConfig | None = None,
+        shared_context: Any | None = None,
     ):
         """Create a new real-time voice pipeline.
 
@@ -45,6 +46,7 @@ class RealtimeVoicePipeline:
                    or a string identifier for a model from the provider.
             tools: A sequence of tools available to the LLM.
             config: The pipeline configuration. If not provided, a default will be used.
+            shared_context: An optional context object that will be passed to tools when they are executed.
         """
         if isinstance(model, str) or model is None:
             self._model_name_to_load: str | None = model
@@ -59,7 +61,8 @@ class RealtimeVoicePipeline:
 
         self._tools = tools
         self._config = config or VoicePipelineConfig()
-        self._tool_executor = ToolExecutor(tools)
+        self._shared_context = shared_context
+        self._tool_executor = ToolExecutor(tools, shared_context=shared_context)
 
     def _get_model(self) -> RealtimeLLMModel:
         """Get the real-time LLM model to use."""

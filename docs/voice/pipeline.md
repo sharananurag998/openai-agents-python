@@ -103,6 +103,14 @@ from agents.voice import (
     VoicePipelineConfig
 )
 from agents.voice.models.sdk_realtime import SDKRealtimeLLM
+from dataclasses import dataclass
+
+# Define a simple context class for state management (optional)
+@dataclass
+class MyAppContext:
+    """Context for the voice assistant."""
+    user_name: str = "User"
+    interaction_count: int = 0
 
 # Create the input, config, and model
 input_stream = StreamedAudioInput()
@@ -114,11 +122,15 @@ config = VoicePipelineConfig(
 )
 model = SDKRealtimeLLM(model_name="gpt-4o-realtime-preview")
 
-# Create the pipeline with tools
+# Create an app context instance (optional)
+app_context = MyAppContext()
+
+# Create the pipeline with tools and shared context
 pipeline = RealtimeVoicePipeline(
     model=model,
     tools=[get_weather, get_time],
     config=config,
+    shared_context=app_context,  # Optional: shared state for context-aware tools
 )
 
 # Start the pipeline
@@ -146,6 +158,117 @@ while True:
         await input_stream.close()
         break
 ```
+
+### Using Shared Context with Tools
+
+The `RealtimeVoicePipeline` supports passing a shared context object to tools, allowing them to access and modify shared state across multiple interactions. This is useful for building more complex voice applications that need to maintain state, such as:
+
+-   Tracking user preferences
+-   Maintaining conversation history
+-   Counting interactions
+-   Storing user information
+
+#### Setting up a shared context
+
+To use shared context with tools:
+
+1. Define a context class (typically a dataclass) to hold your application state
+2. Create an instance of this class
+3. Pass it to the `RealtimeVoicePipeline` using the `shared_context` parameter
+4. Create tools that accept a `RunContextWrapper[YourContextType]` as their first parameter
+
+```python
+from dataclasses import dataclass
+from agents.run_context import RunContextWrapper
+from agents.tool import function_tool
+
+# Define your context class
+@dataclass
+class MyAppContext:
+    """Context for the voice assistant."""
+    user_name: str
+    interaction_count: int = 0
+
+# Create a context-aware tool
+@function_tool
+def greet_user_and_count(context: RunContextWrapper[MyAppContext]) -> str:
+    """Greets the user by name and counts interactions."""
+    # Access and modify the context
+    context.context.interaction_count += 1
+
+    return f"Hello {context.context.user_name}! This is interaction number {context.context.interaction_count}."
+
+# Create another context-aware tool
+@function_tool
+def get_user_details(context: RunContextWrapper[MyAppContext]) -> dict:
+    """Gets user details from the context."""
+    return {
+        "user_name": context.context.user_name,
+        "interaction_count": context.context.interaction_count
+    }
+
+# Create your application context
+app_context = MyAppContext(user_name="Alice", interaction_count=0)
+
+# Create the pipeline with shared context
+pipeline = RealtimeVoicePipeline(
+    model=model,
+    tools=[get_weather, get_time, greet_user_and_count, get_user_details],
+    config=config,
+    shared_context=app_context,  # Pass the context here
+)
+```
+
+#### How it works
+
+1. The `RealtimeVoicePipeline` passes the shared context to its internal `ToolExecutor`
+2. When the LLM calls a tool, the `ToolExecutor` checks if the tool's first parameter is named `context`
+3. If it is, the executor wraps your context object in a `RunContextWrapper` and passes it to the tool
+4. The tool can then access and modify your context object via `context.context`
+5. Since all tools share the same context object, changes made by one tool are visible to other tools in future calls
+
+This mechanism allows your tools to maintain shared state across turns and interactions in your voice application, without needing to set up a separate state management system.
+
+#### Context-Aware vs. Standard Tools
+
+You can mix both context-aware and standard tools in the same `RealtimeVoicePipeline`:
+
+```python
+# A standard tool (no context parameter)
+@function_tool
+def get_weather(city: str) -> dict:
+    """Gets the weather for the specified city."""
+    return {"temperature": 72, "condition": "sunny"}
+
+# A context-aware tool (has context parameter)
+@function_tool
+def update_user_preference(context: RunContextWrapper[MyAppContext], preference: str, value: str) -> str:
+    """Updates a user preference in the context."""
+    if not hasattr(context.context, "preferences"):
+        context.context.preferences = {}
+    context.context.preferences[preference] = value
+    return f"Updated {preference} to {value}"
+```
+
+**When to use standard tools:**
+
+-   For stateless operations that don't need to remember information between calls
+-   For simple lookups or calculations based solely on the input parameters
+-   When integration with external APIs or services doesn't require user-specific state
+
+**When to use context-aware tools:**
+
+-   When tools need to access or modify shared state
+-   For personalization features that adapt to the user
+-   To implement features that track usage or interactions
+-   When information gathered in one tool call needs to be available to another tool
+
+**Important notes:**
+
+-   The first parameter of a context-aware tool must be named `context` and should have a type annotation of `RunContextWrapper[YourContextType]`
+-   Type hints are recommended but not required; the parameter name `context` is sufficient for the tool to be detected as context-aware
+-   The actual object inside `context.context` will be the instance you passed to `shared_context` when creating the pipeline
+-   All context-aware tools see the same context instance, so changes are immediately visible to all tools
 
 ### Turn Detection Modes
 
