@@ -26,6 +26,10 @@ from ..realtime.model import (
     RealtimeEventRateLimitsUpdated,
     RealtimeEventInputAudioTranscriptionDelta,
     RealtimeEventInputAudioTranscriptionCompleted,
+    RealtimeEventInputAudioBuffer,
+    RealtimeEventInputAudioBufferSpeechStarted,
+    RealtimeEventInputAudioBufferSpeechStopped,
+    RealtimeEventInputAudioBufferCommitted,
 )
 from ...exceptions import AgentsException, UserError
 from ...logger import logger
@@ -281,10 +285,28 @@ class SDKRealtimeSession(RealtimeSession):
                         )
 
                     # Log other VAD-related and lifecycle events without putting them on main queue for now
+                    elif event.type == "input_audio_buffer.speech_started":
+                        await self._event_queue.put(
+                            RealtimeEventInputAudioBufferSpeechStarted(
+                                timestamp=event.timestamp,
+                                event_id=event.event_id
+                            )
+                        )
+                    elif event.type == "input_audio_buffer.speech_stopped":
+                        await self._event_queue.put(
+                            RealtimeEventInputAudioBufferSpeechStopped(
+                                timestamp=event.timestamp,
+                                event_id=event.event_id
+                            )
+                        )
+                    elif event.type == "input_audio_buffer.committed":
+                        await self._event_queue.put(
+                            RealtimeEventInputAudioBufferCommitted(
+                                timestamp=event.timestamp,
+                                event_id=event.event_id
+                            )
+                        )
                     elif event.type in [
-                        "input_audio_buffer.speech_started",
-                        "input_audio_buffer.speech_stopped",
-                        "input_audio_buffer.committed",
                         "conversation.item.created",
                         "response.created",
                         "response.output_item.added",  # Might be useful if we track item lifecycles

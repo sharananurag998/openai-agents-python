@@ -14,6 +14,17 @@ from .events import (
     VoiceStreamEventLifecycle,
     VoiceStreamEventToolCall,
 )
+from .realtime.model import (
+    RealtimeEventAudioChunk,
+    RealtimeEventError as LLMErrorEvent,
+    RealtimeEventSessionBegins,
+    RealtimeEventSessionEnds,
+    RealtimeEventTextDelta,
+    RealtimeEventToolCall as LLMToolCallEvent,
+    RealtimeEventInputAudioBufferSpeechStarted,
+    RealtimeEventInputAudioBufferSpeechStopped,
+    RealtimeEventInputAudioBufferCommitted,
+)
 from .pipeline_config import (
     VoicePipelineConfig,
 )  # Assuming this might be needed for settings
@@ -116,6 +127,12 @@ class StreamedRealtimeResult:
                     )
                 )
                 await self._done()  # Mark as done on error
+
+            # Handle input audio buffer events
+            elif isinstance(llm_event, (RealtimeEventInputAudioBufferSpeechStarted,
+                                      RealtimeEventInputAudioBufferSpeechStopped,
+                                      RealtimeEventInputAudioBufferCommitted)):
+                await self._event_queue.put(llm_event)
 
             # Other RealtimeEvent types like SessionStatus could be handled here if needed.
 

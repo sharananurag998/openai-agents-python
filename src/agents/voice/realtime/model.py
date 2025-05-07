@@ -81,6 +81,30 @@ class RealtimeEventInputAudioTranscriptionCompleted:
     )
 
 
+@dataclass
+class RealtimeEventInputAudioBufferSpeechStarted:
+    """Event indicating speech has started in the input audio buffer."""
+    timestamp: float  # Unix timestamp in seconds
+    event_id: str  # Unique identifier for the event
+    type: Literal["input_audio_buffer_speech_started"] = "input_audio_buffer_speech_started"
+
+
+@dataclass
+class RealtimeEventInputAudioBufferSpeechStopped:
+    """Event indicating speech has stopped in the input audio buffer."""
+    timestamp: float  # Unix timestamp in seconds
+    event_id: str  # Unique identifier for the event
+    type: Literal["input_audio_buffer_speech_stopped"] = "input_audio_buffer_speech_stopped"
+
+
+@dataclass
+class RealtimeEventInputAudioBufferCommitted:
+    """Event indicating the input audio buffer has been committed."""
+    timestamp: float  # Unix timestamp in seconds
+    event_id: str  # Unique identifier for the event
+    type: Literal["input_audio_buffer_committed"] = "input_audio_buffer_committed"
+
+
 RealtimeEvent = (
     RealtimeEventSessionBegins
     | RealtimeEventAudioChunk
@@ -92,6 +116,9 @@ RealtimeEvent = (
     | RealtimeEventRateLimitsUpdated
     | RealtimeEventInputAudioTranscriptionDelta
     | RealtimeEventInputAudioTranscriptionCompleted
+    | RealtimeEventInputAudioBufferSpeechStarted
+    | RealtimeEventInputAudioBufferSpeechStopped
+    | RealtimeEventInputAudioBufferCommitted
 )
 
 
